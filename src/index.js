@@ -8,10 +8,14 @@ const ACTIONS = {
   CREATE: (request, derived) => {
     const response = {};
     console.log('request.content', request.content);
-    fs.writeFileSync(`articles/${derived.fileName}`, request.content, err => {
-      if (err) throw err;
-      console.log('saved file', filename);
-    });
+    try {
+      fs.writeFileSync(`articles/${derived.fileName}`, request.content);
+    } catch(err) {
+      console.log("ERROR:", err);
+      throw err;
+    }
+    console.log('saved file', derived.fileName);
+    return response;
   },
 
   READ: (request, derived) => {
