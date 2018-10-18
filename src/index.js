@@ -2,7 +2,7 @@ const http = require('http');
 const url = require('url');
 const fs = require('fs');
 
-console.log("Starting up...");
+console.log("Starting up...?");
 
 const ACTIONS = {
   CREATE: (request, derived) => {

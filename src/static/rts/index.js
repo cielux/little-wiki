@@ -9,6 +9,10 @@ class Util {
     return inclusive ? x >= lesser && x <= greater : x > lesser && x < greater;
   }
 
+  static lerp(a, b, c) {
+    return a + (c * (b - a));
+  }
+
   static overload(that, argumentz, implementations) {
     argumentz = [...argumentz];
     
@@ -180,6 +184,10 @@ class Coords {
   static add(a, b) {
     return new Coords(a.getX() + b.getX(), a.getY() + b.getY());
   }
+
+  static lerp(a, b, c) {
+    return new Coords(Util.lerp(a.getX(), b.getX(), c), Util.lerp(a.getY(), b.getY(), c));
+  }
 }
 
 class Game {
@@ -191,24 +199,83 @@ class Game {
     // of the units and bookkeeping logic for keeping them all consistent with
     // each other.
     this.units = [];
+    this.selectedUnits = [];
+  }
+  
+  drawUnit(unit) {
+    let unitLeft = unit.getPosition().getX();
+    let unitTop = unit.getPosition().getY();
+    let unitWidth = unit.getWidth();
+    let unitHeight = unit.getHeight();
+    if (this.selectedUnits.includes(unit)) {
+      // Draw border around unit
+      const BORDER_THICKNESS = 5;            
+      this.ctx.fillStyle = 'rgba(0, 0, 0, 1)';
+      this.ctx.fillRect(unitLeft - BORDER_THICKNESS, unitTop - BORDER_THICKNESS,
+        unitWidth + BORDER_THICKNESS * 2, unitHeight + BORDER_THICKNESS * 2);
+    }
+    this.ctx.fillStyle = unit.getColor().toRgbaString();
+    this.ctx.fillRect(unitLeft, unitTop, unitWidth, unitHeight);
+  }
+
+  deselectUnits() {
+    this.selectedUnits = [];
+  }
+
+  selectUnit(unit) {
+    this.selectedUnits = [unit];
+  }
+
+  handleLeftClick(event) {
+    let elemLeft = this.canvas.offsetLeft;
+    let elemTop = this.canvas.offsetTop;
+    let x = event.pageX - elemLeft;
+    let y = event.pageY - elemTop;
+    
+    let clickLocation = new Coords(x, y);
+    let didSelectUnit = false;
+    for (const unit of this.units) {
+      if (unit.getBounds().contains(clickLocation)) {
+        this.selectUnit(unit);
+        didSelectUnit = true;
+        
+        // unit.setPosition(Coords.add(unit.getPosition(), new Coords(100, 0)));
+        break;
+      }
+    }
+    if (!didSelectUnit) {
+      this.deselectUnits();
+    }
+  }
+
+  handleRightClick(event) {
+    let elemLeft = this.canvas.offsetLeft;
+    let elemTop = this.canvas.offsetTop;
+    let x = event.pageX - elemLeft;
+    let y = event.pageY - elemTop;
+    
+    let clickLocation = new Coords(x, y);
+    if (this.selectedUnits.length) {
+      for (const unit of this.selectedUnits) {
+        unit.setDestination(clickLocation);
+      }
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    return false;
   }
   
   start() {
-    this._ticker = setInterval(()=> this.tick(), 1000 / 30);
-    
-    let elemLeft = this.canvas.offsetLeft;
-    let elemTop = this.canvas.offsetTop;
+    this._ticker = setInterval(() => this.tick(), 1000 / 30);
+
+    this.canvas.addEventListener('contextmenu', event => {
+      return this.handleRightClick(event);
+    }, false);
 
     this.canvas.addEventListener('click', event => {
-      var x = event.pageX - elemLeft,
-          y = event.pageY - elemTop;
-          
-      var clickLocation = new Coords(x, y);
-      for (const unit of this.units) {
-        if (unit.getBounds().contains(clickLocation)) {
-          unit.setPosition(Coords.add(unit.getPosition(), new Coords(100, 0)));
-          break;
-        }
+      if (event.which === 1) {
+        return this.handleLeftClick(event);
       }
     }, false);
     
@@ -219,16 +286,13 @@ class Game {
   }
   
   tick() {
+    for (const unit of this.units) {
+      unit.tick();
+    }
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     for (const unit of this.units) {
       this.drawUnit(unit);
     }
-  }
-  
-  drawUnit(unit) {
-    this.ctx.fillStyle = unit.getColor().toRgbaString();
-    this.ctx.fillRect(unit.getPosition().getX(), unit.getPosition().getY(),
-      unit.getWidth(), unit.getHeight());
   }
 }
 
@@ -237,7 +301,7 @@ class Unit {
     this.setWidth(Unit.DEFAULT_WIDTH);
     this.setHeight(Unit.DEFAULT_HEIGHT);
     this.setPosition(Unit.DEFAULT_POSITION);
-    this.setColor(Color.random());
+    this.setColor(Color.random(true));
     this.setSpeed(Unit.DEFAULT_SPEED);
   }
 
@@ -249,6 +313,13 @@ class Unit {
   }
   
   getColor() { return new Color(this._color); }
+
+  getDestination() {
+    if (this._destination === undefined) {
+      return undefined;
+    }
+    return new Coords(this._destination);
+  }
   
   getHeight() { return this._height; }
   
@@ -262,6 +333,10 @@ class Unit {
   getSpeed() { return this._speed; }
   
   getWidth() { return this._width; }
+
+  setDestination(coords) {
+    this._destination = new Coords(coords);
+  }
   
   setColor(color) {
     this._color = color;
@@ -287,6 +362,21 @@ class Unit {
       topLeft.getY() + this.getHeight());
     this._bounds = new Bounds(topLeft, bottomRight);
   }
+
+  tick() {
+    let speed = this.getSpeed();
+    let destination = this.getDestination();
+    if (destination === undefined) {
+      return;
+    }
+    let distance = this.getPosition().distanceFrom(destination);
+    if (distance < speed) {
+      this.setPosition(destination);
+      return;
+    }
+    let fraction = speed / distance;
+    this.setPosition(Coords.lerp(this.getPosition(), destination, fraction));
+  }
   
   _updatePosition() {
     let position = this.getPosition();
@@ -300,7 +390,7 @@ Unit = Object.assign(Unit, {
   DEFAULT_POSITION: new Coords(0, 0),
   DEFAULT_WIDTH: 50,
   DEFAULT_HEIGHT: 50,
-  DEFAULT_SPEED: 1
+  DEFAULT_SPEED: 10
 });
 
 let game = new Game();
